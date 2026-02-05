@@ -656,10 +656,7 @@ elif st.session_state.pagina_atual == 6:
     
     # HEMOGRAMA
     st.subheader("1. Hemograma Completo")
-    with st.expander("📸 CLIQUE AQUI para ver um exemplo"):
-        st.write("Procure pela folha que tem uma lista de nomes como 'Hemácias', 'Leucócitos' e 'Plaquetas'.")
-        # LINK WEB GARANTIDO
-        st.image("https://upload.wikimedia.org/wikipedia/commons/8/87/Hemograma_Normal.jpg", caption="Exemplo Real de Hemograma", use_container_width=True)
+    st.caption("Procure pela folha que tem uma lista de nomes como 'Hemácias', 'Leucócitos' e 'Plaquetas'.")
     
     up_hemo = st.file_uploader("Selecione o arquivo do Hemograma:", type=["jpg", "png", "pdf"], key="up_hemo")
     if up_hemo: st.session_state.files_uploaded["hemo"] = True
@@ -667,10 +664,7 @@ elif st.session_state.pagina_atual == 6:
     # ECG
     st.divider()
     st.subheader("2. Eletrocardiograma (ECG)")
-    with st.expander("📸 CLIQUE AQUI para ver um exemplo"):
-        st.write("É aquele exame com as linhas desenhadas em papel milimetrado (geralmente rosa ou verde).")
-        # LINK WEB GARANTIDO
-        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Normal_12_lead_ECG.jpg/640px-Normal_12_lead_ECG.jpg", caption="Exemplo de ECG (Papel Rosa)", use_container_width=True)
+    st.caption("É aquele exame com as linhas desenhadas em papel milimetrado (geralmente rosa ou verde).")
     
     up_ecg = st.file_uploader("Selecione o arquivo do ECG:", type=["jpg", "png", "pdf"], key="up_ecg")
     if up_ecg: st.session_state.files_uploaded["ecg"] = True
@@ -678,9 +672,7 @@ elif st.session_state.pagina_atual == 6:
     # RX
     st.divider()
     st.subheader("3. Raio-X de Tórax (Laudo ou Imagem)")
-    with st.expander("📸 CLIQUE AQUI para ver um exemplo"):
-        st.write("Pode ser a foto do filme (chapa) ou a foto do papel com o laudo escrito.")
-        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Normal_posteroanterior_%28PA%29_chest_radiograph_%28X-ray%29.jpg/600px-Normal_posteroanterior_%28PA%29_chest_radiograph_%28X-ray%29.jpg", caption="Raio-X de Tórax Normal", use_container_width=True)
+    st.caption("Pode ser a foto do filme (chapa) ou a foto do papel com o laudo escrito.")
     st.file_uploader("Selecione o arquivo do Raio-X:", type=["jpg", "png", "pdf"], key="up_rx")
     
     # OUTROS
