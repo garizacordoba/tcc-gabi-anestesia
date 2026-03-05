@@ -1,6 +1,14 @@
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, date
 import os
+
+# LISTA DE SOBRENOMES DE RISCO (ATUALIZADA)
+SOBRENOMES_RISCO_HM = [
+        "ALIAGHA", "BERKEMBROCK", "BOMBONATTI", "CLASEN", "COSTA", "COUTO", "ENDER COLETO", 
+        "GERVIN", "HILLESHEIN", "HOFFMANN", "JANSEN", "JASPER", "KOERICH", "KUHNEN", 
+        "LEHMKUHL", "MATTOS", "NEUMANN", "STUART", "POSSAS", "REGIS", "RIZZATI", 
+        "SENA", "STEFENS", "WOLLSTEIN", "MORITZ", "KRETZER"
+    ]
 
 # --- CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Avaliação Pré-Anestésica", page_icon="🏥", layout="centered")
@@ -139,7 +147,19 @@ for key, val in variaveis_inputs.items():
 
 def proxima_pagina(): st.session_state.pagina_atual += 1
 def pagina_anterior(): st.session_state.pagina_atual -= 1
-def remover_medicamento(index): st.session_state.lista_medicamentos.pop(index); st.rerun()
+def remover_medicamento(index): 
+    # 1. Remove o remédio
+    st.session_state.lista_medicamentos.pop(index)
+    
+    # 2. Remove a doença correspondente (se ela existir na mesma posição)
+    if index < len(st.session_state.lista_doencas_detectadas):
+        st.session_state.lista_doencas_detectadas.pop(index)
+    
+    # 3. Se a lista de remédios zerou, garante que a de doenças também zere
+    if not st.session_state.lista_medicamentos:
+        st.session_state.lista_doencas_detectadas = []
+        
+    st.rerun()
 
 # ==============================================================================
 # PÁGINA 1: BOAS-VINDAS E TCLE (COMPLETA)
@@ -175,38 +195,81 @@ if st.session_state.pagina_atual == 1:
 elif st.session_state.pagina_atual == 2:
     st.progress(15)
     st.header("1. Identificação")
+    
     with st.form("form_identificacao"):
         st.subheader("Dados Pessoais")
         nome = st.text_input("Nome Completo (Civil)", value=st.session_state.dados.get("nome", ""))
         nome_social = st.text_input("Nome Social (Opcional)", value=st.session_state.dados.get("nome_social", ""))
+        
         col1, col2 = st.columns(2)
-        with col1: cpf = st.text_input("CPF (Apenas números)", max_chars=11, placeholder="12345678900", value=st.session_state.dados.get("cpf", ""))
-        with col2: nascimento = st.date_input("Data de Nascimento *", value=st.session_state.dados.get("nascimento", datetime(1990, 1, 1)), min_value=datetime(1900, 1, 1), max_value=datetime.today())
+        with col1: 
+            cpf = st.text_input("CPF (Apenas números)", max_chars=11, placeholder="12345678900", value=st.session_state.dados.get("cpf", ""))
+        with col2: 
+            nascimento = st.date_input("Data de Nascimento *", 
+                                     value=st.session_state.dados.get("nascimento", date(1990, 1, 1)), 
+                                     min_value=date(1900, 1, 1), 
+                                     max_value=date.today())
         
         col3, col4 = st.columns(2)
-        with col3: peso = st.number_input("Peso (kg)", min_value=30.0, max_value=300.0, step=0.1, key="peso_kg")
-        with col4: altura = st.number_input("Altura (cm) *", min_value=0, max_value=250, step=1, key="altura_cm", help="Ex: 165 para 1 metro e 65")
+        with col3: 
+            peso = st.number_input("Peso (kg)", min_value=30.0, max_value=300.0, step=0.1, value=float(st.session_state.dados.get("peso", 70.0)))
+        with col4: 
+            altura = st.number_input("Altura (cm) *", min_value=0, max_value=250, step=1, value=int(st.session_state.dados.get("altura", 170)), help="Ex: 165 para 1 metro e 65")
 
         telefone = st.text_input("Celular com DDD", max_chars=11, placeholder="11999998888", value=st.session_state.dados.get("telefone", ""))
         genero = st.selectbox("Gênero Biológico", ["Feminino", "Masculino", "Prefiro não responder"], index=0)
         endereco = st.text_input("Endereço Completo", placeholder="Rua, Número, Cidade...", value=st.session_state.dados.get("endereco", ""))
+        
         st.divider()
         st.subheader("Dados da Cirurgia")
         tipo_cirurgia = st.text_input("Qual cirurgia será realizada?", value=st.session_state.dados.get("tipo_cirurgia", ""))
         cirurgiao = st.text_input("Nome do Cirurgião (Opcional)", value=st.session_state.dados.get("cirurgiao", ""))
-        data_cirurgia = st.date_input("Data da cirurgia", min_value=datetime.today(), value=st.session_state.dados.get("data_cirurgia", datetime.today()))
-        lateralidade = st.radio("Lado da cirurgia", ["Não se aplica", "Direita", "Esquerda", "Ambos"], horizontal=True)
+        
+        # Recuperei a Data da Cirurgia e Lateralidade aqui:
+        data_cirurgia = st.date_input("Data da cirurgia", min_value=date.today(), value=st.session_state.dados.get("data_cirurgia", date.today()))
+        lateralidade = st.radio("Lado da cirurgia", ["Não se aplica", "Direita", "Esquerda", "Ambos"], horizontal=True, index=["Não se aplica", "Direita", "Esquerda", "Ambos"].index(st.session_state.dados.get("lateralidade", "Não se aplica")))
+
         st.write("")
         c1, c2 = st.columns([1, 1])
-        with c1: 
-            if st.form_submit_button("⬅ Voltar"): pagina_anterior(); st.rerun()
-        with c2:
-            submitted = st.form_submit_button("Próximo Passo ➡", type="primary")
-            if submitted:
-                st.session_state.dados.update({"nome": nome, "cpf": cpf, "telefone": telefone, "endereco": endereco, "genero": genero, "nascimento": nascimento, "peso": peso, "altura": altura})
+        
+        # Botões dentro do formulário
+        btn_voltar = c1.form_submit_button("⬅ Voltar")
+        btn_proximo = c2.form_submit_button("Próximo Passo ➡", type="primary")
+
+        if btn_voltar:
+            pagina_anterior()
+            st.rerun()
+
+        if btn_proximo:
+            erros = []
+            if not nome: erros.append("Nome Completo")
+            if not cpf: erros.append("CPF")
+            if peso <= 30.0: erros.append("Peso")
+            if altura == 0: erros.append("Altura")
+            if not telefone: erros.append("Celular")
+            if not endereco: erros.append("Endereço Completo")
+            if not tipo_cirurgia: erros.append("Qual cirurgia será realizada")
+
+            if erros:
+                st.error("⚠️ **Por favor, preencha os itens obrigatórios:**\n- " + "\n- ".join(erros))
+            else:
+                st.session_state.dados.update({
+                    "nome": nome, 
+                    "nome_social": nome_social, 
+                    "cpf": cpf,
+                    "nascimento": nascimento, 
+                    "peso": peso, 
+                    "altura": altura,
+                    "telefone": telefone, 
+                    "genero": genero, 
+                    "endereco": endereco,
+                    "tipo_cirurgia": tipo_cirurgia, 
+                    "cirurgiao": cirurgiao,
+                    "data_cirurgia": data_cirurgia,
+                    "lateralidade": lateralidade
+                })
                 proxima_pagina()
                 st.rerun()
-
 # ==============================================================================
 # PÁGINA 3: MEDICAMENTOS (LISTA GIGANTE - RESTAURADA)
 # ==============================================================================
@@ -216,13 +279,15 @@ elif st.session_state.pagina_atual == 3:
     st.markdown("Selecione seus medicamentos na lista abaixo (Ordem Alfabética).")
     
     DB_MEDICAMENTOS = {
-        "AAS (Aspirina) 100mg": "PERGUNTAR_AAS",
+        "Não tomo nenhum medicamento": "Sem comorbidades",
+	"AAS (Aspirina) 100mg": "PERGUNTAR_AAS",
         "Abciximab": "Risco de Sangramento (Antiagregante)",
         "Allenia (Fumarato de Formoterol + Budesonida)": "Asma/DPOC",
         "Amitriptilina 25mg": "PERGUNTAR_AMITRIPTILINA",
         "Anabolizantes / Testosterona (Durateston, Deca, etc)": "PERGUNTAR_ANABOLIZANTE",
         "Anfepramona (Dualid) / Femproporex": "PERGUNTAR_ESTIMULANTE",
         "Anlodipino 5mg": "Hipertensão (Pressão Alta)",
+	"Anticoncepcional oral": "Planejamento familiar",
         "Apixabana (Eliquis)": "Risco de Sangramento (Anticoagulante)",
         "Aripiprazol": "Transtorno Psiquiátrico",
         "Atenolol 25mg": "Hipertensão/Arritmia",
@@ -327,7 +392,9 @@ elif st.session_state.pagina_atual == 3:
         st.subheader("💊 Adicionar Medicamento")
         col1, col2 = st.columns([2, 1])
         with col1:
-            sel = st.selectbox("Nome do Medicamento", ["Selecione..."] + sorted(list(DB_MEDICAMENTOS.keys())) + ["Outro..."])
+            lista_meds = sorted([m for m in DB_MEDICAMENTOS.keys() if m!= "Não tomo nenhum medicamento"])
+            opções = ["Selecione...", "Não tomo nenhum medicamento"] + lista_meds + ["Outro..."]
+            sel = st.selectbox("Nome do Medicamento", opções) 
             manual = st.text_input("Digite o nome e dosagem:") if sel == "Outro..." else ""
         with col2:
             freq = st.selectbox("Frequência", ["1x ao dia (manhã)", "1x ao dia (almoço)", "1x ao dia (noite)", "2x dia", "3x dia", "1x na semana (Semanal)", "Se necessário"])
@@ -399,7 +466,11 @@ elif st.session_state.pagina_atual == 3:
         if st.button("➕ Adicionar"):
             nome = manual if sel == "Outro..." else sel
             if nome and nome != "Selecione...":
-                st.session_state.lista_medicamentos.append(f"{nome} ({freq}) {detalhe}")
+                if nome == "Não tomo nenhum medicamento":
+                    st.session_state.lista_medicamentos.append(nome)
+                else:
+                    st.session_state.lista_medicamentos.append(f"{nome} ({freq}) {detalhe}")
+                
                 if doenca: st.session_state.lista_doencas_detectadas.append(doenca)
                 st.rerun()
 
@@ -413,10 +484,20 @@ elif st.session_state.pagina_atual == 3:
                 if c2.button("🗑️", key=f"del_{i}"): remover_medicamento(i)
     with col_disease:
         st.subheader("🩺 Condições")
-        for d in st.session_state.lista_doencas_detectadas: st.info(d)
+        
+        # Se a lista de medicamentos estiver vazia ou só tiver o "Não tomo nenhum"
+        if not st.session_state.lista_medicamentos or "Não tomo nenhum medicamento" in st.session_state.lista_medicamentos:
+            st.info("Sem comorbidades conhecidas")
+            st.session_state.lista_doencas_detectadas = [] # Garante que a lista interna esteja limpa
+        else:
+            # Mostra as doenças que sobraram
+            for d in st.session_state.lista_doencas_detectadas: 
+                st.info(d)
+        
         novo = st.text_input("Outra doença?")
         if st.button("Add Doença") and novo:
-             st.session_state.lista_doencas_detectadas.append(novo); st.rerun()
+             st.session_state.lista_doencas_detectadas.append(novo)
+             st.rerun()
 
     st.divider()
     st.subheader("Histórico Cirúrgico")
@@ -434,10 +515,18 @@ elif st.session_state.pagina_atual == 3:
 
     st.write("")
     c1, c2 = st.columns([1, 1])
-    with c1: 
-        if st.button("⬅ Voltar"): pagina_anterior(); st.rerun()
-    with c2: 
-        if st.button("Próximo ➡", type="primary"): proxima_pagina(); st.rerun()
+    with c1:
+        if st.button("⬅ Voltar"):
+            pagina_anterior()
+            st.rerun()
+            
+    with c2:
+        if st.button("Próximo ➡", type="primary"):
+            if len(st.session_state.lista_medicamentos) == 0:
+                st.error("⚠️ Por favor, adicione pelo menos um medicamento (ou selecione 'Não tomo nenhum medicamento').")
+            else:
+                proxima_pagina()
+                st.rerun()
 
 # ==============================================================================
 # PÁGINA 4: ALERGIAS, FAMÍLIA E HÁBITOS (LÓGICA COMPLETA)
@@ -445,15 +534,7 @@ elif st.session_state.pagina_atual == 3:
 elif st.session_state.pagina_atual == 4:
     st.progress(45)
     st.header("3. Alergias, Família e Hábitos")
-    
-    # LISTA DE SOBRENOMES DE RISCO (ATUALIZADA)
-    SOBRENOMES_RISCO_HM = [
-        "ALIAGHA", "BERKEMBROCK", "BOMBONATTI", "CLASEN", "COSTA", "COUTO", "ENDER COLETO", 
-        "GERVIN", "HILLESHEIN", "HOFFMANN", "JANSEN", "JASPER", "KOERICH", "KUHNEN", 
-        "LEHMKUHL", "MATTOS", "NEUMANN", "STUART", "POSSAS", "REGIS", "RIZZATI", 
-        "SENA", "STEFENS", "WOLLSTEIN", "MORITZ", "KRETZER"
-    ]
-    
+   
     if any(s in st.session_state.dados.get("nome", "").upper() for s in SOBRENOMES_RISCO_HM):
         st.warning(f"ℹ️ Notei que seu sobrenome é comum na nossa região.")
         if st.radio("Família tem origem Alemã/Europeia?", ["Não/Não sei", "Sim"], horizontal=True, key="origem_familia") == "Sim":
@@ -466,6 +547,9 @@ elif st.session_state.pagina_atual == 4:
         with c1: 
             st.checkbox("Dipirona", key="alg_dip"); st.checkbox("AINES", key="alg_aines")
             st.checkbox("Penicilina", key="alg_pen"); st.checkbox("Sulfa", key="alg_sulfa")
+            st.checkbox("Outros", key="alg_outros")
+        if st.session_state.get("alg_outros"):
+            st.text_input("Qual outra alergia? (Ex: Alimentos, Contraste, Corantes...)", key="qual_outra_alergia")
         with c2:
             latex = st.checkbox("Látex", key="alg_latex")
             st.checkbox("Escopolamina (Buscopan)", key="alg_buscopan")
@@ -510,18 +594,23 @@ elif st.session_state.pagina_atual == 4:
             st.text_input("Parou há quanto tempo?", key="tempo_parou_fumo")
 
     with c2:
-        bebe = st.selectbox("Álcool:", ["Não bebo", "Sim, raramente", "Sim, socialmente", "Sim, diariamente/frequentemente"], key="status_alcool")
+        bebe = st.selectbox("Álcool:", ["Selecione...", "Não bebo", "Sim, raramente", "Sim, socialmente", "Sim, diariamente/frequentemente"], key="status_alcool")
         if bebe == "Sim, diariamente/frequentemente":
             st.text_input("Há quanto tempo/O que bebe?", key="tempo_bebe_alcool")
             st.radio("O que costuma beber?", ["Cerveja", "Vinho", "Destilados", "Misturo tudo"], key="tipo_bebida_alcool")
 
     st.write("Drogas Ilícitas:")
-    drogas = st.multiselect("Uso:", ["Maconha", "Cocaína", "Crack", "Ecstasy/MDMA", "LSD", "Outras"], key="uso_drogas")
+    # Adicionei "Não uso" e coloquei como padrão
+    opcoes_drogas = ["Não uso drogas ilícitas", "Maconha", "Cocaína", "Crack", "Ecstasy/MDMA", "LSD", "Outras"]
+    drogas = st.multiselect("Uso:", opcoes_drogas, key="uso_drogas")
     
     if ("Cocaína" in drogas or "Crack" in drogas or "Ecstasy/MDMA" in drogas) and "ECG Recente (Estimulantes)" not in st.session_state.orientacoes_finais:
         st.session_state.orientacoes_finais.append("ECG Recente (Estimulantes)")
     
-    if drogas:
+    # Se usar algo que NÃO seja "Não uso", abre os detalhes
+    if drogas and "Não uso drogas ilícitas" not in drogas:
+        if "Outras" in drogas:
+            st.text_input("Quais outras drogas?", key="qual_outra_droga")
         c1, c2 = st.columns(2)
         with c1: st.text_input("Usa há quanto tempo?", key="tempo_drogas")
         with c2: st.text_input("Último uso?", key="ultima_drogas")
@@ -531,7 +620,54 @@ elif st.session_state.pagina_atual == 4:
     with c1: 
         if st.button("⬅ Voltar"): pagina_anterior(); st.rerun()
     with c2: 
-        if st.button("Próximo ➡", type="primary"): proxima_pagina(); st.rerun()
+        if st.button("Próximo ➡", type="primary"):
+            erros_p4 = []
+            
+            # 1. Trava de ALERGIAS
+            if st.session_state.radio_alergia == "Sim":
+                # Se marcou 'Outros' mas não escreveu qual
+                if st.session_state.get("alg_outros") and not st.session_state.get("qual_outra_alergia"):
+                    erros_p4.append("Descreva qual é a sua 'Outra' alergia")
+
+            # 2. Trava de FUMO
+            if st.session_state.status_fumo == "Sim, fumo atualmente": 
+                if not st.session_state.tipo_fumo:
+                    erros_p4.append("Especifique o tipo de fumo")
+                # Se for cigarro ou palheiro, exige carga tabágica
+                if "Cigarro comum" in st.session_state.tipo_fumo or "Palheiro" in st.session_state.tipo_fumo:
+                    if st.session_state.cig_dia == 0 or st.session_state.anos_fumo == 0:
+                        erros_p4.append("Preencha a quantidade e anos de fumo")
+
+            # 3. Trava de ÁLCOOL
+            if st.session_state.status_alcool == "Selecione...":
+                erros_p4.append("Informe sobre o consumo de álcool")
+
+            # 4. Trava de DROGAS (A que estava dando erro!)
+            # Primeiro: Checa se a lista está vazia
+            if not st.session_state.uso_drogas:
+                erros_p4.append("Informe sobre o uso de drogas (ou selecione 'Não uso')")
+            
+            # Segundo: Se selecionou 'Não uso' junto com outra coisa
+            elif "Não uso drogas ilícitas" in st.session_state.uso_drogas and len(st.session_state.uso_drogas) > 1:
+                erros_p4.append("Conflito nas Drogas: Selecione apenas 'Não uso' ou as substâncias")
+            
+            # Terceiro: Se selecionou drogas REAIS, exige os detalhes
+            elif "Não uso drogas ilícitas" not in st.session_state.uso_drogas:
+                # Se marcou 'Outras', tem que dizer qual
+                if "Outras" in st.session_state.uso_drogas and not st.session_state.get("qual_outra_droga"):
+                    erros_p4.append("Especifique qual 'Outra' droga você usa")
+                
+                # Exige tempo e último uso
+                if not st.session_state.get("tempo_drogas") or not st.session_state.get("ultima_drogas"):
+                    erros_p4.append("Informe o tempo e a data do último uso das drogas")
+
+            # --- VERIFICAÇÃO FINAL ---
+            if erros_p4:
+                # Mostra todos os erros de uma vez só
+                st.error(f"⚠️ Atenção:\n- " + "\n- ".join(erros_p4))
+            else:
+                proxima_pagina()
+                st.rerun()
 
 # ==============================================================================
 # PÁGINA 5: EXAME FÍSICO (VIA AÉREA, SANGUE E STOP-BANG)
@@ -608,10 +744,11 @@ elif st.session_state.pagina_atual == 5:
 
     # --- STOP-BANG (SE IMC > 40) ---
     p = st.session_state.dados.get("peso", 0)
-    a = st.session_state.dados.get("altura", 0)
-    imc = p / (a * a) if a > 0 else 0
+    a_cm = st.session_state.dados.get("altura", 0)
+    a_m = a_cm / 100
+    imc = p / (a_m * a_m) if a_m > 0 else 0
 
-    if imc > 40:
+    if imc > 35:
         st.divider()
         st.subheader("💤 Avaliação do Sono (STOP-BANG)")
         st.info(f"Devido ao IMC ({imc:.1f}), responda sobre seu sono:")
@@ -635,8 +772,17 @@ elif st.session_state.pagina_atual == 5:
         if tem_has: score += 1
         
         if score >= 5:
+           if score >= 5:
+            st.session_state["alerta_apneia_sono"] = True
+            st.warning(f"⚠️ Risco de Apneia Detectado (Score: {score}/8)")
+            
+            # A mensagem técnica só entra na lista se o score for alto
             msg_apneia = f"ALERTA APNEIA (STOP-BANG {score}/8): Alto Risco. Preparar VAD."
-            if msg_apneia not in st.session_state.orientacoes_finais: st.session_state.orientacoes_finais.append(msg_apneia)
+            if msg_apneia not in st.session_state.orientacoes_finais: 
+                st.session_state.orientacoes_finais.append(msg_apneia)
+        else:
+            # Se o score for baixo, a gente garante que o alerta seja Falso
+            st.session_state["alerta_apneia_sono"] = False
 
     st.write("")
     c1, c2 = st.columns([1, 1])
@@ -695,6 +841,26 @@ elif st.session_state.pagina_atual == 6:
 elif st.session_state.pagina_atual == 7:
     st.progress(100)
     st.header("✅ Avaliação Concluída!")
+   # --- CÁLCULOS DE APOIO (PARA NÃO DAR MAIS NAMEERROR) ---
+    altura_m = st.session_state.dados.get("altura", 170) / 100
+    peso_corrigido = st.session_state.dados.get("peso", 70.0)
+    imc = peso_corrigido / (altura_m ** 2) if altura_m > 0 else 0
+    
+    # Definições das variáveis de bloqueio (ECG e HM)
+    lista_drogas = st.session_state.get("uso_drogas", [])
+    estimulantes = ["Cocaína", "Crack", "Ecstasy/MDMA"]
+    precisa_ecg = any(d in lista_drogas for d in estimulantes)
+    fez_upload_ecg = st.session_state.files_uploaded.get("ecg", False)
+    
+    sobrenome_hm = any(s in st.session_state.dados.get("nome", "").upper() for s in SOBRENOMES_RISCO_HM)
+    origem_alemana = st.session_state.get("origem_familia") == "Sim"
+    hist_familiar_hm = any(x in st.session_state.get("detalhe_prob_familia", []) for x in ["Febre muito alta (Hipertermia)", "Rigidez muscular"])
+    
+    bloqueio_apneia = st.session_state.get("alerta_apneia_sono", False)
+    alertas_finais = list(set(st.session_state.orientacoes_finais))
+    tem_alerta_na_lista = any("ALERTA" in m for m in alertas_finais)
+    bloqueio_ecg = precisa_ecg and not fez_upload_ecg
+
     st.success("Obrigado! Seus dados e exames foram registrados.")
     st.divider()
 
@@ -797,38 +963,31 @@ elif st.session_state.pagina_atual == 7:
     if "aas" in lista_meds: manter.append("AAS (Aspirina) - Exceto se cirurgião pedir suspensão")
 
     # EXIBIÇÃO
-    if suspensao_antes:
-        st.markdown(f"""<div class="med-suspensao">🛑 <b>SUSPENDER ANTES:</b><br>{'<br>'.join(suspensao_antes)}</div>""", unsafe_allow_html=True)
-    if suspensao_dia:
-        st.markdown(f"""<div class="med-suspensao">🚫 <b>NÃO TOMAR NO DIA:</b><br>{'<br>'.join(suspensao_dia)}</div>""", unsafe_allow_html=True)
-    if manter:
-        st.markdown(f"""<div class="med-manter">✅ <b>MANTER (TOMAR):</b><br>{'<br>'.join(manter)}</div>""", unsafe_allow_html=True)
+    if not suspensao_antes and not suspensao_dia and not manter:
+        st.info("Nenhuma orientação necessária para seus medicamentos.")
+    else:    
+        if suspensao_antes:
+            st.markdown(f"""<div class="med-suspensao">🛑 <b>SUSPENDER ANTES:</b><br>{'<br>'.join(suspensao_antes)}</div>""", unsafe_allow_html=True)
+        if suspensao_dia:
+            st.markdown(f"""<div class="med-suspensao">🚫 <b>NÃO TOMAR NO DIA:</b><br>{'<br>'.join(suspensao_dia)}</div>""", unsafe_allow_html=True)
+        if manter:
+            st.markdown(f"""<div class="med-manter">✅ <b>MANTER (TOMAR):</b><br>{'<br>'.join(manter)}</div>""", unsafe_allow_html=True)
 
     st.divider()
 
-    # --- 2. ALERTAS DE EXAMES E LEGAIS ---
-    if "ALERTA LEGAL: Testemunha de Jeová." in st.session_state.orientacoes_finais:
-        st.warning("⚖️ Testemunha de Jeová: Necessário assinar Termo de Recusa de Transfusão (Disponível no hospital).")
-    
-    fez_ecg = st.session_state.files_uploaded.get("ecg", False)
-    if "ECG Recente (Estimulantes)" in st.session_state.orientacoes_finais and not fez_ecg:
-        st.error("⚠️ PENDÊNCIA: Necessário trazer ECG recente devido ao histórico de uso de substâncias.")
+ # --- 2. ALERTAS DE SEGURANÇA (PARA O PACIENTE) ---
+    st.subheader("⚠️ Orientações Importantes")
+   
+    # Re-inserindo os alertas calculados na hora (ECG, HM, Látex)
+    if precisa_ecg and not fez_upload_ecg:
+        st.error("⚠️ **PENDÊNCIA:** Necessário apresentar ECG recente no dia da cirurgia.")
+    if (sobrenome_hm and origem_alemana) or hist_familiar_hm:
+        st.warning("🚨 **ALERTA MÉDICO:** Risco de Hipertermia Maligna detectado.")
+    if st.session_state.get("alg_latex"):
+        st.warning("⚠️ **ALERTA LÁTEX:** Alergia confirmada. Sala Latex-Free.")
 
-    st.divider()
 
-    # --- 3. STATUS (SEMÁFORO) ---
-    bloqueio_cardio = "Necessário Avaliação de Risco Cirúrgico" in str(st.session_state.orientacoes_finais)
-    bloqueio_drogas = "ECG Recente (Estimulantes)" in str(st.session_state.orientacoes_finais) and not fez_ecg
-    bloqueio_apneia = any("ALERTA APNEIA" in x for x in st.session_state.orientacoes_finais)
-    
-    if not bloqueio_cardio and not bloqueio_drogas and not bloqueio_apneia:
-        st.markdown("""<div class="status-verde">✅ <b>CIRURGIA PRÉ-APROVADA!</b><br>Aguarde contato para agendamento.</div>""", unsafe_allow_html=True)
-    else:
-        st.markdown("""<div class="status-amarelo">⚠️ <b>ANÁLISE PENDENTE</b><br>Necessário avaliação da equipe (Cardio/Exames) antes da liberação.</div>""", unsafe_allow_html=True)
-
-    st.write("")
-    
-    # --- 4. ÁREA RESTRITA (EXPANDER FECHADO) ---
+           # --- 3. ÁREA RESTRITA (EXPANDER FECHADO) ---
     with st.expander("🔒 Área Restrita (Equipe Médica)"):
         st.write("### Resumo de Alertas Técnicos")
         alertas_tecnicos = ["ALERTA LÁTEX", "ALERTA HIPERTERMIA", "ALERTA VIA AÉREA", "ALERTA APNEIA", "Orlistate", "ALERTA DENTAL"]
@@ -845,40 +1004,109 @@ elif st.session_state.pagina_atual == 7:
         if not encontrou: st.success("Sem alertas técnicos graves.")
 
     st.write("")
-    
+
+    # --- 4. STATUS FINAL (SEMÁFORO) ---
+    st.write("")
+    if not bloqueio_ecg and not bloqueio_apneia and not tem_alerta_na_lista:
+        st.markdown("""<div class="status-verde">✅ <b>CIRURGIA PRÉ-APROVADA!</b><br>Critérios de segurança atendidos.</div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("""<div class="status-amarelo">⚠️ <b>ANÁLISE PENDENTE</b><br>Sua avaliação possui pendências que precisam ser revisadas pela equipe de Anestesiologia. Nossa equipe entrará em contato para orientações adicionais.</div>""", unsafe_allow_html=True)
+
     # --- GERADOR DE HTML PARA IMPRESSÃO ---
     def gerar_html_impressao():
+        from datetime import date
+        dados = st.session_state.get("dados", {})
+
+# --- CORREÇÃO FINAL: CÁLCULO DA IDADE AQUI DENTRO ---
+        nasc = dados.get("nascimento")
+        texto_idade = "Não informada"
+        if nasc:
+            hoje = date.today()
+            idade_calc = hoje.year - nasc.year - ((hoje.month, hoje.day) < (nasc.month, nasc.day))
+            texto_idade = f"{idade_calc} anos"
+
+# 2. PREPARAR O TEXTO DE SUSPENSÃO (O QUE FALTAVA!)
+        # Aqui a função lê as listas que seus IFs preencheram na tela
+        med_html = ""
+        if suspensao_antes:
+            med_html += f"<p style='color: #d9534f;'><b>🛑 SUSPENDER ANTES:</b><br>{'<br>'.join(suspensao_antes)}</p>"
+        if suspensao_dia:
+            med_html += f"<p style='color: #f0ad4e;'><b>🚫 NÃO TOMAR NO DIA:</b><br>{'<br>'.join(suspensao_dia)}</p>"
+        if manter:
+            med_html += f"<p style='color: #5cb85c;'><b>✅ MANTER:</b><br>{'<br>'.join(manter)}</p>"
+        
+        if not med_html:
+            med_html = "<p>Nenhuma orientação de suspensão necessária para os medicamentos listados.</p>"
+        
+        # 1. Recuperar Alertas (Garantindo que não haja duplicatas)
+        alertas_finais = list(set(st.session_state.orientacoes_finais))
+        # Adicionar alertas calculados na hora (ECG e HM) para o papel também
+        if precisa_ecg and not fez_upload_ecg:
+            alertas_finais.append("PENDÊNCIA: Necessário trazer ECG recente.")
+        if (sobrenome_hm and origem_alemana) or hist_familiar_hm:
+            alertas_finais.append("ALERTA: Risco de Hipertermia Maligna.")
+        
+        # Filtra apenas o que for ALERTA ou PENDÊNCIA para o box amarelo
+        lista_alertas_html = "".join([f"<li>{m}</li>" for m in alertas_finais if "ALERTA" in m.upper() or "PENDÊNCIA" in m.upper() or "LEGAL" in m.upper()])
+
+        # 2. Montagem do HTML
         html = f"""
         <html>
         <head>
-            <title>Relatório Pré-Anestésico</title>
+            <meta charset="UTF-8">
             <style>
-                body {{ font-family: Arial, sans-serif; padding: 40px; }}
-                .box {{ border: 1px solid #ccc; padding: 15px; margin-bottom: 10px; background: #f9f9f9; }}
-                .warning {{ background-color: #f8d7da; border: 1px solid #dc3545; color: #721c24; padding: 10px; }}
-                h1 {{ color: #007bff; }}
+                body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; color: #333; }}
+                .header {{ text-align: center; border-bottom: 3px solid #007bff; padding-bottom: 10px; margin-bottom: 30px; }}
+                .paciente-info {{ display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 1.1em; }}
+                .box {{ border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 8px; background-color: #fcfcfc; }}
+                .box h3 {{ margin-top: 0; color: #007bff; border-bottom: 1px solid #eee; padding-bottom: 5px; }}
+                .alert-box {{ background-color: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 8px; margin-bottom: 20px; }}
+                .alert-box h3 {{ color: #856404; margin-top: 0; }}
+                .footer {{ margin-top: 50px; text-align: center; font-size: 0.9em; color: #777; border-top: 1px solid #eee; padding-top: 10px; }}
+                ul {{ margin: 5px 0; padding-left: 20px; }}
+                .label {{ font-weight: bold; color: #555; }}
             </style>
         </head>
         <body onload="window.print()">
-            <h1>Relatório de Orientações</h1>
-            <p><b>Paciente:</b> {st.session_state.dados.get('nome')}</p>
-            <p><b>Data:</b> {datetime.now().strftime('%d/%m/%Y')}</p>
-            <hr>
-            <div class="box">
-                <h3>🍽️ Jejum e Adornos</h3>
-                <p><b>Jejum:</b> {texto_jejum}</p>
-                <p><b>Adornos:</b> {texto_adornos}</p>
-            </div>
-            
-            <div class="box">
-                <h3>💊 Medicamentos</h3>
-                {'<p>' + '<br>'.join(st.session_state.lista_medicamentos) + '</p>' if st.session_state.lista_medicamentos else "<p>Nenhum medicamento informado.</p>"}
+            <div class="header">
+                <h1 style="margin:0;">Relatório de Orientação Pré-Anestésica</h1>
+                <p style="margin:5px 0;">Hospital {dados.get('hospital_selecionado', 'Regional de São José')}</p>
             </div>
 
-            {f'<div class="warning"><h3>🛑 Suspensão Obrigatória:</h3><p>{"<br>".join(suspensao_antes)}</p></div>' if suspensao_antes else ''}
-            
-            <hr>
-            <p style="font-size: small; color: gray;">Este documento é um guia pré-operatório gerado automaticamente.</p>
+            <div class="paciente-info">
+                <div><span class="label">Paciente:</span> {dados.get('nome', 'Não informado')}</div>
+                <div><span class="label">Idade:</span> {texto_idade}</div>
+                <div><span class="label">Data:</span> {date.today().strftime('%d/%m/%Y')}</div>
+            </div>
+
+            <div class="box">
+                <h3>📋 Dados da Cirurgia</h3>
+                <p><span class="label">Procedimento:</span> {dados.get('tipo_cirurgia', 'Não informado')}</p>
+                <p><span class="label">Lateralidade:</span> {dados.get('lateralidade', 'Não se aplica')}</p>
+            </div>
+
+            <div class="box">
+                <h3>🍽️ Orientações de Jejum</h3>
+                <p>{texto_jejum}</p>
+                <p><span class="label">Remoção de adornos:</span> {texto_adornos}</p>
+            </div>
+
+            <div class="box">
+                <h3>💊 Medicamentos em Uso</h3>
+                <ul>
+                    {"".join([f"<li>{m}</li>" for m in st.session_state.lista_medicamentos]) if st.session_state.lista_medicamentos else "<li>Nenhum medicamento informado.</li>"}
+                </ul>
+            </div>
+
+            <div class="box">
+                <h3>💊 Orientações de Suspensão/Manutenção</h3>
+                {med_html}
+            </div>
+
+            <div class="footer">
+                <p>Este documento é gerado automaticamente e deve ser apresentado no dia da cirurgia.</p>
+                <p><b>Atenção:</b> Esta orientação não substitui a consulta presencial com o médico anestesiologista.</p>
+            </div>
         </body>
         </html>
         """
@@ -896,6 +1124,13 @@ elif st.session_state.pagina_atual == 7:
         if st.button("Área do Avaliador (Juiz) ➡", type="secondary"):
             proxima_pagina()
             st.rerun()
+
+# --- CONTATO DO HOSPITAL (FORA DA ÁREA RESTRITA) ---
+    st.write("")
+    st.divider()
+    st.markdown("### 📞 Suporte ao Paciente")
+    st.markdown("Dúvidas sobre o agendamento ou orientações?")
+    st.info("🟢 **(48) 3664-9734** (Recepção do Ambulatório Geral)")
 
 # ==============================================================================
 # PÁGINA 8: AVALIAÇÃO DOS JUÍZES (LINK SEGURO PARA GOOGLE FORMS)
